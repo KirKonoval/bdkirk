@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Видеопоздравление — КирК и КО</title>
+<style>
+:root{font-family:system-ui,-apple-system,sans-serif;color-scheme:dark;background:#141016;color:#f9f3ea}*{box-sizing:border-box}body{margin:0;padding:22px;background:radial-gradient(circle at top right,#483027,#141016 60%);min-height:100vh}main{max-width:480px;margin:auto}.tag{font-size:13px;letter-spacing:.12em;color:#ffbd82;font-weight:700}h1{font-size:36px;line-height:1.12;margin:18px 0}p{line-height:1.5;color:#e6d8cd}.card{border:1px solid #594750;background:#211a23;border-radius:20px;padding:20px;margin:18px 0}label{display:block;margin-bottom:9px}input{width:100%;padding:14px;border-radius:12px;border:1px solid #857583;color:white;background:#302832;font:inherit}video{display:block;width:100%;max-height:60vh;aspect-ratio:9/16;object-fit:contain;background:#110f11;border-radius:16px;margin:16px 0}button,.fallback{display:block;width:100%;margin:10px 0;padding:15px;border:0;border-radius:12px;background:#ffbd82;color:#22160f;font:700 16px system-ui;text-align:center;text-decoration:none}button.secondary{background:#443a44;color:#fff}button:disabled{opacity:.5}#timer{font-size:32px;text-align:center;font-variant-numeric:tabular-nums;color:#ffbd82}#status{min-height:48px}[hidden]{display:none!important}small{color:#baacae;line-height:1.5;display:block}
+</style>
+</head>
+<body><main>
+<div class="tag">МУЗЫКАЛЬНЫЙ ВЕЧЕР · КИРК И КО</div>
+<h1>Скажи пару слов на память 🎤</h1>
+<p>30 секунд для поздравления, пожелания или импровизации. Держи телефон вертикально и говори поближе к микрофону.</p>
+<div class="card">
+<label for="guest">Как тебя подписать? Необязательно</label>
+<input id="guest" maxlength="40" autocomplete="name" placeholder="Имя или компания друзей">
+<video id="preview" muted autoplay playsinline hidden></video>
+<video id="playback" playsinline controls hidden></video>
+<div id="timer" hidden>00:30</div>
+<button id="enable">Включить камеру</button>
+<button id="start" hidden>Начать запись</button>
+<button id="stop" class="secondary" hidden>Закончить раньше</button>
+<button id="retry" class="secondary" hidden>Переснять</button>
+<button id="save" hidden>Скачать видео на телефон</button>
+<p id="status" role="status" aria-live="polite">После записи сможешь посмотреть видео, прежде чем отправить.</p>
+</div>
+<a class="fallback" href="https://cloud.yarkov.tech/u/d/d4920aa087134f9f8944/" target="_blank" rel="noopener noreferrer">Загрузить видео в Seafile ↗</a>
+<small>Важно: сначала нажми «Скачать видео на телефон», дождись сохранения файла и только потом перейди к загрузке. Автоматическая отправка со страницы пока не подключена. В Seafile выбери сохранённый файл; не закрывай эту страницу до проверки результата.</small>
+</main><script>
+const $=id=>document.getElementById(id);
+let stream=null,recorder=null,chunks=[],videoBlob=null,videoUrl=null,tick=null,deadline=null,startTime=0;
+function text(value){$('status').textContent=value}
+function show(...ids){for(const id of ['enable','start','stop','retry','save'])$(id).hidden=!ids.includes(id)}
+function resetTimer(){clearInterval(tick);clearTimeout(deadline);$('timer').hidden=true}
+function closeCamera(){if(stream)stream.getTracks().forEach(track=>track.stop());stream=null;$('preview').srcObject=null}
+function clearVideo(){if(videoUrl)URL.revokeObjectURL(videoUrl);videoUrl=null;videoBlob=null;$('playback').removeAttribute('src');$('playback').load();$('playback').hidden=true}
+async function enableCamera(){
+ if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder){text('Этот браузер не поддерживает запись. Открой ссылку в Chrome или Safari.');return}
+ $('enable').disabled=true;
+ try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:720},height:{ideal:1280},frameRate:{ideal:24,max:30}},audio:{echoCancellation:true}});$('preview').srcObject=stream;$('preview').hidden=false;await $('preview').play();show('start');text('Камера готова. Нажми «Начать запись».')}
+ catch(e){closeCamera();show('enable');text('Камера или микрофон не включились: '+e.name+' — '+e.message)}
+ finally{$('enable').disabled=false}
+}
+function stopRecord(){if(recorder?.state==='recording')recorder.stop();resetTimer()}
+function startRecord(){
+ if(!stream)return;clearVideo();chunks=[];
+ let mime='';for(const type of ['video/mp4','video/webm;codecs=vp8,opus','video/webm'])if(MediaRecorder.isTypeSupported(type)){mime=type;break}
+ try{const opts={videoBitsPerSecond:1600000,audioBitsPerSecond:96000};if(mime)opts.mimeType=mime;recorder=new MediaRecorder(stream,opts);
+ recorder.ondataavailable=event=>{if(event.data?.size)chunks.push(event.data)};
+ recorder.onerror=()=>{resetTimer();closeCamera();show('enable');text('Ошибка записи, попробуй ещё раз.')};
+ recorder.onstop=()=>{resetTimer();videoBlob=new Blob(chunks,{type:recorder.mimeType||chunks[0]?.type||'video/webm'});chunks=[];closeCamera();$('preview').hidden=true;if(!videoBlob.size){show('enable');text('Запись пустая. Попробуй ещё раз.');return}videoUrl=URL.createObjectURL(videoBlob);$('playback').src=videoUrl;$('playback').hidden=false;show('retry','save');text('Посмотри видео. Затем скачай его на телефон и загрузи по кнопке ниже. Только после загрузки оно будет сохранено в Seafile.')};
+ recorder.start();startTime=Date.now();$('timer').hidden=false;$('timer').textContent='00:30';show('stop');text('Идёт запись…');tick=setInterval(()=>{const left=Math.max(0,30-Math.floor((Date.now()-startTime)/1000));$('timer').textContent='00:'+String(left).padStart(2,'0');if(!left)stopRecord()},200);deadline=setTimeout(stopRecord,30000)
+ }catch(e){show('start');text('Не удалось начать запись: '+e.message)}
+}
+function retry(){clearVideo();show('enable');text('Включи камеру, чтобы переснять.')}
+function saveVideo(){if(!videoBlob||!videoUrl)return;const mime=videoBlob.type.split(';')[0];const ext=mime==='video/mp4'?'mp4':'webm';const name=($('guest').value.trim().replace(/[^\p{L}\p{N}_ -]/gu,'').slice(0,30).replace(/\s+/g,'_')||'guest');const a=document.createElement('a');a.href=videoUrl;a.download='kirk_greeting_'+name+'.'+ext;document.body.appendChild(a);a.click();a.remove();text('Проверь, что файл сохранился на телефоне. Затем открой Seafile и загрузи этот файл. Если скачивание не началось, не закрывай страницу: попробуй другое действие браузера или пересними штатной камерой.')}
+$('enable').onclick=enableCamera;$('start').onclick=startRecord;$('stop').onclick=stopRecord;$('retry').onclick=retry;$('save').onclick=saveVideo;
+window.addEventListener('pagehide',()=>{resetTimer();closeCamera()});
+</script></body></html>
